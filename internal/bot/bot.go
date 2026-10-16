@@ -224,14 +224,14 @@ func (b *Bot) disableAuto(ctx context.Context, chatID int64) string {
 // ParseInterval — чистая функция без зависимостей => идеальна для юнит-теста.
 func ParseInterval(args []string) (int, error) {
 	if len(args) == 0 {
-		return 0, errors.New("Укажите интервал в минутах, например: /start-auto 10")
+		return 0, errors.New("укажите интервал в минутах, например: /start-auto 10")
 	}
 	n, err := strconv.Atoi(args[0])
 	if err != nil {
-		return 0, errors.New("Интервал должен быть целым числом минут.")
+		return 0, errors.New("интервал должен быть целым числом минут")
 	}
 	if n < minInterval || n > maxInterval {
-		return 0, fmt.Errorf("Интервал должен быть от %d до %d минут.", minInterval, maxInterval)
+		return 0, fmt.Errorf("интервал должен быть от %d до %d минут", minInterval, maxInterval)
 	}
 	return n, nil
 }

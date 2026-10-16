@@ -49,7 +49,7 @@ func (r *RateRepo) SaveRates(ctx context.Context, rates []domain.Rate) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op после успешного Commit
+	defer func() { _ = tx.Rollback(ctx) }() // После успешного Commit откат вернёт ErrTxClosed, это ожидаемо.
 
 	const q = `
 		INSERT INTO rates (currency_id, price, fetched_at)

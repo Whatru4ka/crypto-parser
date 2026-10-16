@@ -64,7 +64,7 @@ func (p *BinanceProvider) FetchRates(ctx context.Context, symbols []string) ([]d
 	if err != nil {
 		return nil, fmt.Errorf("call provider: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // ошибка закрытия тела после чтения не влияет на результат
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("provider returned status %d", resp.StatusCode)
