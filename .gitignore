@@ -1,0 +1,14 @@
+# Секреты
+.env
+.env.*
+!.env.example
+
+# Артефакты Go
+coverage.out
+*.test
+
+# IDE и ОС
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

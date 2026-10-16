@@ -1,0 +1,94 @@
+openapi: 3.0.3
+info:
+  title: Crypto Rates Service API
+  description: Курсы криптовалют со статистикой за сутки и за последний час.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Локальный запуск
+
+paths:
+  /healthz:
+    get:
+      summary: Проверка живости сервиса
+      responses:
+        "200":
+          description: Сервис работает
+          content:
+            text/plain:
+              schema: { type: string, example: ok }
+
+  /rates:
+    get:
+      summary: Курсы всех отслеживаемых валют
+      operationId: listRates
+      responses:
+        "200":
+          description: Список курсов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rates:
+                    type: array
+                    items: { $ref: "#/components/schemas/RateStats" }
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /rates/{cryptocurrency}:
+    get:
+      summary: Курс одной валюты
+      operationId: getRate
+      parameters:
+        - name: cryptocurrency
+          in: path
+          required: true
+          description: Тикер монеты, регистр не важен
+          schema: { type: string, example: BTC }
+      responses:
+        "200":
+          description: Курс со статистикой
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RateStats" }
+        "404":
+          description: Валюта не поддерживается
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Данных по валюте ещё нет
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  responses:
+    InternalError:
+      description: Внутренняя ошибка
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    RateStats:
+      type: object
+      required: [symbol, price, day_min, day_max, hour_change_pct, updated_at]
+      properties:
+        symbol:          { type: string, example: BTC }
+        price:           { type: number, format: double, example: 65000.5 }
+        day_min:         { type: number, format: double, example: 63800.0 }
+        day_max:         { type: number, format: double, example: 66120.4 }
+        hour_change_pct:
+          type: number
+          format: double
+          nullable: true
+          description: null, если истории меньше часа
+          example: 1.24
+        updated_at:      { type: string, format: date-time }
+    Error:
+      type: object
+      properties:
+        error: { type: string, example: currency not found }

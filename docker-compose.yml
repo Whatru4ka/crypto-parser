@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rates}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rates}
+      POSTGRES_DB: ${POSTGRES_DB:-rates}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Скрипты из этой папки выполняются при ПЕРВОМ старте контейнера.
+      # Простейший способ применить миграции без отдельного инструмента.
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rates}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy   # не стартуем, пока БД не готова
+    environment:
+      HTTP_ADDR: ":8080"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-rates}:${POSTGRES_PASSWORD:-rates}@db:5432/${POSTGRES_DB:-rates}?sslmode=disable"
+      TELEGRAM_TOKEN: "${TELEGRAM_TOKEN}"
+      FETCH_INTERVAL: "${FETCH_INTERVAL:-5m}"
+      PROVIDER_BASE_URL: "${PROVIDER_BASE_URL:-https://api.binance.com}"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
