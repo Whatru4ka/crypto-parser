@@ -26,8 +26,8 @@ type stubSubs struct {
 	listErr error
 }
 
-func (s *stubSubs) Upsert(context.Context, int64, int) error         { return nil }
-func (s *stubSubs) Deactivate(context.Context, int64) error          { return nil }
+func (s *stubSubs) Upsert(context.Context, int64, int) error { return nil }
+func (s *stubSubs) Deactivate(context.Context, int64) error  { return nil }
 func (s *stubSubs) MarkSent(_ context.Context, chatID int64, _ time.Time) error {
 	s.marked = append(s.marked, chatID)
 	return nil
