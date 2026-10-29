@@ -14,6 +14,7 @@ import (
 	"github.com/Whatru4ka/crypto-rates/internal/transport/httpapi"
 )
 
+// stubSvc — мок domain.RateService: хендлер тестируем без БД и Binance.
 type stubSvc struct {
 	stats domain.RateStats
 	err   error
@@ -26,12 +27,13 @@ func (s stubSvc) Get(context.Context, string) (domain.RateStats, error) {
 	return s.stats, s.err
 }
 
-func newRouter(svc httpapi.RateProvider) http.Handler {
+func newRouter(svc domain.RateService) http.Handler {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return httpapi.NewHandler(svc, log).Router()
 }
 
 func TestGetRate(t *testing.T) {
+	// Три ответа сервиса → три HTTP-статуса: 200 / 404 / 503.
 	pct := 1.5
 	ok := domain.RateStats{Symbol: "BTC", Price: 65000, DayMin: 64000,
 		DayMax: 66000, HourChangePct: &pct, UpdatedAt: time.Now()}
@@ -68,6 +70,7 @@ func TestGetRate(t *testing.T) {
 }
 
 func TestListRates(t *testing.T) {
+	// GET /rates оборачивает список в {"rates": [...]}.
 	req := httptest.NewRequest(http.MethodGet, "/rates", nil)
 	rec := httptest.NewRecorder()
 	newRouter(stubSvc{stats: domain.RateStats{Symbol: "ETH"}}).ServeHTTP(rec, req)

@@ -17,6 +17,8 @@ func NewRateService(repo domain.RateRepository) *RateService {
 	return &RateService{repo: repo}
 }
 
+var _ domain.RateService = (*RateService)(nil)
+
 // Normalize — нормализация пользовательского ввода.
 // "btc", " Btc " и "BTC" должны означать одно и то же.
 func Normalize(symbol string) string {

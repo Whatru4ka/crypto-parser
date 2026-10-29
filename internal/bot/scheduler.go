@@ -21,13 +21,13 @@ type Sender interface {
 // подписчиков, работает при нескольких репликах.
 type Scheduler struct {
 	subs   domain.SubscriptionRepository
-	svc    RateProvider
+	svc    domain.RateService
 	sender Sender
 	log    *slog.Logger
 	tick   time.Duration
 }
 
-func NewScheduler(subs domain.SubscriptionRepository, svc RateProvider,
+func NewScheduler(subs domain.SubscriptionRepository, svc domain.RateService,
 	sender Sender, log *slog.Logger) *Scheduler {
 	return &Scheduler{subs: subs, svc: svc, sender: sender, log: log, tick: time.Minute}
 }

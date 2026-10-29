@@ -3,7 +3,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -16,18 +15,12 @@ import (
 	"github.com/Whatru4ka/crypto-rates/internal/domain"
 )
 
-// RateProvider — то, что нужно хендлерам от сервиса (интерфейс у потребителя).
-type RateProvider interface {
-	List(ctx context.Context) ([]domain.RateStats, error)
-	Get(ctx context.Context, symbol string) (domain.RateStats, error)
-}
-
 type Handler struct {
-	svc RateProvider
+	svc domain.RateService
 	log *slog.Logger
 }
 
-func NewHandler(svc RateProvider, log *slog.Logger) *Handler {
+func NewHandler(svc domain.RateService, log *slog.Logger) *Handler {
 	return &Handler{svc: svc, log: log}
 }
 

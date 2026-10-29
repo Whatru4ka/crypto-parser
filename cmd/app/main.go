@@ -1,5 +1,5 @@
 // Composition root: единственное место, где конкретные реализации
-// связываются друг с другом. Все остальные пакеты знают только интерфейсы.
+// связываются друг с другом через интерфейсы из domain.
 package main
 
 import (
@@ -26,32 +26,46 @@ import (
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	if err := run(log); err != nil {
+	app, err := setup(log)
+	if err != nil {
+		log.Error("setup", "err", err)
+		os.Exit(1)
+	}
+	defer app.close()
+
+	if err := run(app); err != nil {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(log *slog.Logger) error {
+// app — собранные зависимости. Поля с интерфейсами, чтобы слои не знали конкретные типы.
+type app struct {
+	log             *slog.Logger
+	shutdownTimeout time.Duration
+	pool            *pgxpool.Pool
+	worker          *fetcher.Worker
+	tg              *bot.Bot
+	sched           *bot.Scheduler
+	http            *http.Server
+}
+
+// setup только инициализирует: конфиг, БД, репозитории, сервисы, транспорты.
+func setup(log *slog.Logger) (*app, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Контекст отменяется по SIGINT/SIGTERM — это и есть сигнал
-	// всем фоновым горутинам начать graceful shutdown.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
+	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer pool.Close()
 
-	// Ждём готовности БД: в docker-compose Postgres может подняться позже нас.
 	if err := waitForDB(ctx, pool, log); err != nil {
-		return err
+		pool.Close()
+		return nil, err
 	}
 
 	rateRepo := repository.NewRateRepo(pool)
@@ -59,54 +73,75 @@ func run(log *slog.Logger) error {
 	rateSvc := service.NewRateService(rateRepo)
 	provider := fetcher.NewBinanceProvider(cfg.ProviderBaseURL)
 
+	a := &app{
+		log:             log,
+		shutdownTimeout: cfg.ShutdownTimeout,
+		pool:            pool,
+		worker:          fetcher.NewWorker(provider, rateRepo, cfg.FetchInterval, log),
+		http: &http.Server{
+			Addr:              cfg.HTTPAddr,
+			Handler:           httpapi.NewHandler(rateSvc, log).Router(),
+			ReadHeaderTimeout: 5 * time.Second,
+		},
+	}
+
+	if cfg.TelegramToken == "" {
+		log.Warn("TELEGRAM_TOKEN is empty, bot disabled")
+		return a, nil
+	}
+
+	tg, err := bot.New(cfg.TelegramToken, rateSvc, subRepo, log)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	a.tg = tg
+	a.sched = bot.NewScheduler(subRepo, rateSvc, tg, log)
+	return a, nil
+}
+
+// run стартует фоновые процессы и HTTP, затем ждёт сигнала на остановку.
+func run(a *app) error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	var wg sync.WaitGroup
 
-	// 1) Фоновое обновление курсов
-	worker := fetcher.NewWorker(provider, rateRepo, cfg.FetchInterval, log)
 	wg.Add(1)
-	go func() { defer wg.Done(); worker.Run(ctx) }()
+	go func() { defer wg.Done(); a.worker.Run(ctx) }()
 
-	// 2) Telegram-бот + шедулер автоотправки (только если задан токен)
-	if cfg.TelegramToken != "" {
-		tg, err := bot.New(cfg.TelegramToken, rateSvc, subRepo, log)
-		if err != nil {
-			return err
-		}
+	if a.tg != nil {
 		wg.Add(2)
-		go func() { defer wg.Done(); tg.Run(ctx) }()
-		sched := bot.NewScheduler(subRepo, rateSvc, tg, log)
-		go func() { defer wg.Done(); sched.Run(ctx) }()
-	} else {
-		log.Warn("TELEGRAM_TOKEN is empty, bot disabled")
+		go func() { defer wg.Done(); a.tg.Run(ctx) }()
+		go func() { defer wg.Done(); a.sched.Run(ctx) }()
 	}
 
-	// 3) REST API
-	srv := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewHandler(rateSvc, log).Router(),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Info("http server started", "addr", cfg.HTTPAddr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("http server", "err", err)
-			stop() // роняем всё приложение, если HTTP не поднялся
+		a.log.Info("http server started", "addr", a.http.Addr)
+		if err := a.http.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			a.log.Error("http server", "err", err)
+			stop()
 		}
 	}()
 
 	<-ctx.Done()
-	log.Info("shutting down")
+	a.log.Info("shutting down")
 
-	// Даём серверу дошить текущие запросы.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
 	defer cancel()
-	_ = srv.Shutdown(shutdownCtx)
+	_ = a.http.Shutdown(shutdownCtx)
 
 	wg.Wait()
-	log.Info("stopped")
+	a.log.Info("stopped")
 	return nil
+}
+
+func (a *app) close() {
+	if a.pool != nil {
+		a.pool.Close()
+	}
 }
 
 func waitForDB(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
@@ -120,7 +155,7 @@ func waitForDB(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(i) * time.Second): // линейный backoff
+		case <-time.After(time.Duration(i) * time.Second):
 		}
 	}
 	return err

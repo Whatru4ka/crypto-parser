@@ -25,7 +25,10 @@ api/openapi.yaml        контракт REST API
 ```
 
 Правило зависимостей: внешние слои знают о внутренних, обратное запрещено.
-Интерфейсы объявлены у потребителя — поэтому любой слой тестируется с моками.
+Контракты слоёв — интерфейсы в `internal/domain/interfaces.go` (`RateRepository`,
+`RateService`, `RateProvider`, `SubscriptionRepository`). Реализации (`*RateRepo`,
+`*RateService`, `*BinanceProvider`) к ним только подключаются; в тестах вместо
+них моки.
 
 ## Запуск
 

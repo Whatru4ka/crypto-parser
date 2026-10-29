@@ -18,6 +18,8 @@ type RateRepo struct {
 
 func NewRateRepo(pool *pgxpool.Pool) *RateRepo { return &RateRepo{pool: pool} }
 
+var _ domain.RateRepository = (*RateRepo)(nil)
+
 // ActiveSymbols — какие монеты нужно обновлять фоновому воркеру.
 // Список берём из БД, а не из константы: добавить монету = INSERT, без релиза.
 func (r *RateRepo) ActiveSymbols(ctx context.Context) ([]string, error) {

@@ -4,7 +4,6 @@
 package domain
 
 import (
-	"context"
 	"errors"
 	"time"
 )
@@ -41,26 +40,4 @@ type Subscription struct {
 	IntervalMinutes int
 	IsActive        bool
 	LastSentAt      *time.Time
-}
-
-// RateRepository — порт к хранилищу. Объявлен здесь (у потребителя),
-// а реализован в пакете repository. Это позволяет подменять его моком в тестах.
-type RateRepository interface {
-	ActiveSymbols(ctx context.Context) ([]string, error)
-	SaveRates(ctx context.Context, rates []Rate) error
-	GetStats(ctx context.Context, symbol string) (RateStats, error)
-	GetAllStats(ctx context.Context) ([]RateStats, error)
-}
-
-// SubscriptionRepository — порт к подпискам.
-type SubscriptionRepository interface {
-	Upsert(ctx context.Context, chatID int64, minutes int) error
-	Deactivate(ctx context.Context, chatID int64) error
-	DueSubscriptions(ctx context.Context, now time.Time) ([]Subscription, error)
-	MarkSent(ctx context.Context, chatID int64, at time.Time) error
-}
-
-// RateProvider — порт к внешнему источнику курсов (Binance и т.п.).
-type RateProvider interface {
-	FetchRates(ctx context.Context, symbols []string) ([]Rate, error)
 }

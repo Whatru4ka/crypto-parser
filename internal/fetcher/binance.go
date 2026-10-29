@@ -21,6 +21,8 @@ type BinanceProvider struct {
 	quote   string // котировочная валюта: BTCUSDT
 }
 
+var _ domain.RateProvider = (*BinanceProvider)(nil)
+
 func NewBinanceProvider(baseURL string) *BinanceProvider {
 	return &BinanceProvider{
 		baseURL: baseURL,

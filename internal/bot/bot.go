@@ -16,9 +16,13 @@ import (
 	"github.com/Whatru4ka/crypto-rates/internal/domain"
 )
 
-type RateProvider interface {
-	List(ctx context.Context) ([]domain.RateStats, error)
-	Get(ctx context.Context, symbol string) (domain.RateStats, error)
+// TelegramAPI — узкий контракт Bot API. *tgbotapi.BotAPI реализует его сам;
+// в тестах подставляется мок, бот не ходит в Telegram.
+type TelegramAPI interface {
+	Send(c tgbotapi.Chattable) (tgbotapi.Message, error)
+	Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
+	GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel
+	StopReceivingUpdates()
 }
 
 const (
@@ -27,20 +31,27 @@ const (
 )
 
 type Bot struct {
-	api  *tgbotapi.BotAPI
-	svc  RateProvider
+	api  TelegramAPI
+	svc  domain.RateService
 	subs domain.SubscriptionRepository
 	log  *slog.Logger
 }
 
-func New(token string, svc RateProvider, subs domain.SubscriptionRepository,
+func New(token string, svc domain.RateService, subs domain.SubscriptionRepository,
 	log *slog.Logger) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("init telegram api: %w", err)
 	}
-	return &Bot{api: api, svc: svc, subs: subs, log: log}, nil
+	return NewWithAPI(api, svc, subs, log), nil
 }
+
+func NewWithAPI(api TelegramAPI, svc domain.RateService, subs domain.SubscriptionRepository,
+	log *slog.Logger) *Bot {
+	return &Bot{api: api, svc: svc, subs: subs, log: log}
+}
+
+var _ TelegramAPI = (*tgbotapi.BotAPI)(nil)
 
 // Run читает апдейты long-polling'ом до отмены контекста.
 func (b *Bot) Run(ctx context.Context) {

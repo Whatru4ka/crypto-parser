@@ -18,6 +18,8 @@ func NewSubscriptionRepo(pool *pgxpool.Pool) *SubscriptionRepo {
 	return &SubscriptionRepo{pool: pool}
 }
 
+var _ domain.SubscriptionRepository = (*SubscriptionRepo)(nil)
+
 // Upsert — /start-auto N. Повторный вызов меняет интервал, а не плодит строки.
 func (r *SubscriptionRepo) Upsert(ctx context.Context, chatID int64, minutes int) error {
 	const q = `
